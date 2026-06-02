@@ -1,1 +1,890 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>履歷溫度計 · Resume Thermometer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;600;900&family=DM+Serif+Display:ital@0;1&family=Space+Mono:wght@400;700&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --border: #1e1e2e;
+    --text: #e8e6f0;
+    --muted: #6b6880;
+    --ice: #7ec8e3;
+    --room: #a8e6a3;
+    --warm: #f0c060;
+    --boil: #ff6b35;
+    --plasma: #c084fc;
+    --glow-ice: rgba(126,200,227,0.3);
+    --glow-room: rgba(168,230,163,0.3);
+    --glow-warm: rgba(240,192,96,0.3);
+    --glow-boil: rgba(255,107,53,0.3);
+    --glow-plasma: rgba(192,132,252,0.4);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Serif TC', serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* Ambient background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 40% at 20% 10%, rgba(192,132,252,0.06) 0%, transparent 60%),
+      radial-gradient(ellipse 40% 60% at 80% 90%, rgba(255,107,53,0.05) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 30% at 50% 50%, rgba(126,200,227,0.03) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app {
+    position: relative;
+    z-index: 1;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 20px 80px;
+  }
+
+  /* Header */
+  header {
+    text-align: center;
+    margin-bottom: 50px;
+  }
+
+  .title-en {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(12px, 2vw, 16px);
+    letter-spacing: 0.4em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .title-zh {
+    font-family: 'Noto Serif TC', serif;
+    font-size: clamp(28px, 6vw, 52px);
+    font-weight: 900;
+    line-height: 1.1;
+    background: linear-gradient(135deg, #e8e6f0 0%, #c084fc 50%, #ff6b35 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 16px;
+  }
+
+  .subtitle {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.8;
+    font-weight: 300;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
+  /* Main layout */
+  .main-layout {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 40px;
+    align-items: start;
+  }
+
+  /* Thermometer */
+  .thermometer-wrap {
+    position: sticky;
+    top: 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .thermo-container {
+    position: relative;
+    width: 80px;
+    height: 420px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .thermo-labels {
+    position: absolute;
+    right: -100px;
+    top: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column-reverse;
+    justify-content: space-around;
+    padding: 20px 0;
+  }
+
+  .thermo-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+    transition: color 0.5s;
+  }
+
+  .thermo-label.active { color: var(--text); }
+
+  /* SVG Thermometer */
+  .thermo-svg {
+    width: 80px;
+    height: 420px;
+    overflow: visible;
+    filter: drop-shadow(0 0 20px rgba(192,132,252,0.1));
+  }
+
+  /* Temp display */
+  .temp-display {
+    text-align: center;
+  }
+
+  .temp-value {
+    font-family: 'Space Mono', monospace;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--plasma);
+    transition: color 0.5s;
+    line-height: 1;
+  }
+
+  .temp-label {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+    letter-spacing: 0.1em;
+  }
+
+  /* Right panel */
+  .right-panel { display: flex; flex-direction: column; gap: 24px; }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 1.5px dashed var(--border);
+    border-radius: 16px;
+    padding: 36px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+    background: rgba(255,255,255,0.01);
+  }
+
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--plasma);
+    background: rgba(192,132,252,0.04);
+    box-shadow: 0 0 30px rgba(192,132,252,0.1);
+  }
+
+  .upload-icon {
+    font-size: 36px;
+    margin-bottom: 12px;
+    opacity: 0.6;
+  }
+
+  .upload-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--text);
+  }
+
+  .upload-hint {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  #fileInput { display: none; }
+
+  .file-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(192,132,252,0.15);
+    border: 1px solid rgba(192,132,252,0.3);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 12px;
+    color: var(--plasma);
+    margin-top: 12px;
+    font-family: 'Space Mono', monospace;
+  }
+
+  /* Textarea */
+  .text-area-wrap { position: relative; }
+
+  .section-label {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    font-family: 'Space Mono', monospace;
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 140px;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    color: var(--text);
+    font-family: 'Noto Serif TC', serif;
+    font-size: 13px;
+    line-height: 1.7;
+    padding: 16px;
+    resize: vertical;
+    transition: border-color 0.3s;
+    outline: none;
+  }
+
+  textarea:focus { border-color: rgba(192,132,252,0.5); }
+  textarea::placeholder { color: var(--muted); }
+
+  /* Analyze button */
+  .analyze-btn {
+    width: 100%;
+    padding: 16px;
+    background: linear-gradient(135deg, rgba(192,132,252,0.2), rgba(255,107,53,0.15));
+    border: 1.5px solid rgba(192,132,252,0.4);
+    border-radius: 12px;
+    color: var(--text);
+    font-family: 'Noto Serif TC', serif;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    letter-spacing: 0.05em;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .analyze-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(192,132,252,0.3), rgba(255,107,53,0.2));
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .analyze-btn:hover::before { opacity: 1; }
+  .analyze-btn:hover { box-shadow: 0 0 30px rgba(192,132,252,0.2); transform: translateY(-1px); }
+  .analyze-btn:active { transform: translateY(0); }
+  .analyze-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  .btn-inner {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  /* Loading */
+  .loading-dots {
+    display: none;
+    gap: 4px;
+  }
+
+  .loading-dots span {
+    width: 6px; height: 6px;
+    background: var(--plasma);
+    border-radius: 50%;
+    animation: dot-bounce 1.2s infinite;
+  }
+
+  .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes dot-bounce {
+    0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+    40% { transform: translateY(-6px); opacity: 1; }
+  }
+
+  /* Results */
+  .result-panel {
+    display: none;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    animation: fadeUp 0.6s ease;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .result-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .result-badge {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    letter-spacing: 0.05em;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .result-level-name {
+    font-size: 18px;
+    font-weight: 900;
+    line-height: 1.2;
+  }
+
+  .result-body { padding: 24px; }
+
+  .quadrant-box {
+    background: rgba(255,255,255,0.02);
+    border-left: 3px solid var(--plasma);
+    border-radius: 0 8px 8px 0;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+  }
+
+  .quadrant-title {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+    font-family: 'Space Mono', monospace;
+    margin-bottom: 8px;
+  }
+
+  .quadrant-content {
+    font-size: 14px;
+    line-height: 1.8;
+    color: var(--text);
+  }
+
+  .encouragement-box {
+    padding: 20px;
+    border-radius: 12px;
+    line-height: 1.9;
+    font-size: 14px;
+    font-style: italic;
+    color: var(--text);
+    border: 1px solid rgba(255,255,255,0.06);
+    background: linear-gradient(135deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+    position: relative;
+  }
+
+  .encouragement-box::before {
+    content: '"';
+    position: absolute;
+    top: -8px;
+    left: 16px;
+    font-size: 60px;
+    font-family: 'DM Serif Display', serif;
+    color: var(--plasma);
+    opacity: 0.4;
+    line-height: 1;
+  }
+
+  /* Scale cards */
+  .scales-title {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+    font-family: 'Space Mono', monospace;
+    margin-bottom: 16px;
+    margin-top: 24px;
+  }
+
+  .scale-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .scale-card {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.01);
+    transition: all 0.3s;
+    cursor: default;
+  }
+
+  .scale-card.highlight {
+    border-color: rgba(192,132,252,0.4);
+    background: rgba(192,132,252,0.05);
+    box-shadow: 0 0 20px rgba(192,132,252,0.08);
+  }
+
+  .scale-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 4px;
+  }
+
+  .scale-card-name { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+  .scale-card-desc { font-size: 11px; color: var(--muted); line-height: 1.5; font-weight: 300; }
+
+  /* Divider */
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 6px 0;
+  }
+
+  /* OR separator */
+  .or-sep {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--muted);
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+  }
+  .or-sep::before, .or-sep::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* Error */
+  .error-msg {
+    background: rgba(255,80,80,0.1);
+    border: 1px solid rgba(255,80,80,0.3);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: #ff8080;
+    display: none;
+  }
+
+  /* Responsive */
+  @media (max-width: 640px) {
+    .main-layout { grid-template-columns: 1fr; }
+    .thermometer-wrap { position: relative; top: 0; flex-direction: row; gap: 24px; }
+    .thermo-container { width: 50px; height: 260px; }
+    .thermo-svg { width: 50px; height: 260px; }
+    .thermo-labels { right: -80px; font-size: 8px; }
+    .temp-display { text-align: left; }
+  }
+
+  /* Shine animation on thermometer fill */
+  @keyframes rise {
+    from { transform: scaleY(0); }
+    to { transform: scaleY(1); }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="title-en">Resume Thermometer</div>
+    <h1 class="title-zh">履歷溫度計</h1>
+    <p class="subtitle">從「功能性人力」到「策略性資產」的蛻變量測儀<br>上傳或貼上您的履歷，感知您的人才溫度</p>
+  </header>
+
+  <div class="main-layout">
+
+    <!-- Thermometer -->
+    <div class="thermometer-wrap">
+      <div class="thermo-container">
+        <svg class="thermo-svg" viewBox="0 0 80 420" fill="none" xmlns="http://www.w3.org/2000/svg" id="thermoSVG">
+          <!-- Defs -->
+          <defs>
+            <clipPath id="fillClip">
+              <rect x="32" y="30" width="16" height="340" rx="8"/>
+            </clipPath>
+            <linearGradient id="fillGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#c084fc"/>
+              <stop offset="25%" stop-color="#ff6b35"/>
+              <stop offset="50%" stop-color="#f0c060"/>
+              <stop offset="75%" stop-color="#a8e6a3"/>
+              <stop offset="100%" stop-color="#7ec8e3"/>
+            </linearGradient>
+            <filter id="glow">
+              <feGaussianBlur stdDeviation="3" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+
+          <!-- Tube background -->
+          <rect x="32" y="30" width="16" height="340" rx="8" fill="#0d0d14" stroke="#1e1e2e" stroke-width="1.5"/>
+
+          <!-- Fill (animated) -->
+          <g clip-path="url(#fillClip)">
+            <rect id="thermoFill" x="32" y="370" width="16" height="0" fill="url(#fillGrad)"
+              style="transform-origin: bottom; transition: height 1.5s cubic-bezier(0.34, 1.56, 0.64, 1)"/>
+          </g>
+
+          <!-- Tick marks -->
+          <g stroke="#2a2a3e" stroke-width="1">
+            <line x1="48" y1="82" x2="56" y2="82"/>   <!-- 5 plasma -->
+            <line x1="48" y1="150" x2="56" y2="150"/>  <!-- 4 boil -->
+            <line x1="48" y1="218" x2="56" y2="218"/>  <!-- 3 warm -->
+            <line x1="48" y1="286" x2="56" y2="286"/>  <!-- 2 room -->
+            <line x1="48" y1="354" x2="56" y2="354"/>  <!-- 1 ice -->
+          </g>
+
+          <!-- Active tick indicators -->
+          <g id="tickIndicators">
+            <!-- Will be shown by JS -->
+          </g>
+
+          <!-- Bulb -->
+          <circle cx="40" cy="390" r="18" fill="#0d0d14" stroke="#1e1e2e" stroke-width="1.5"/>
+          <circle id="thermoBulb" cx="40" cy="390" r="13" fill="#1e1e2e" style="transition: fill 1s ease"/>
+
+          <!-- Tube outline -->
+          <rect x="32" y="30" width="16" height="340" rx="8" fill="none" stroke="#2a2a3e" stroke-width="1.5"/>
+        </svg>
+
+        <div class="thermo-labels" id="thermoLabels">
+          <span class="thermo-label" data-level="1">冰點 · ICE</span>
+          <span class="thermo-label" data-level="2">室溫 · ROOM</span>
+          <span class="thermo-label" data-level="3">微溫 · WARM</span>
+          <span class="thermo-label" data-level="4">沸點 · BOIL</span>
+          <span class="thermo-label" data-level="5">等離子 · PLASMA</span>
+        </div>
+      </div>
+
+      <div class="temp-display">
+        <div class="temp-value" id="tempValue">—</div>
+        <div class="temp-label">HEAT LEVEL</div>
+      </div>
+    </div>
+
+    <!-- Right Panel -->
+    <div class="right-panel">
+
+      <!-- Upload -->
+      <div>
+        <div class="section-label">上傳履歷</div>
+        <div class="upload-zone" id="uploadZone">
+          <div class="upload-icon">📄</div>
+          <div class="upload-title">拖放或點擊上傳履歷</div>
+          <div class="upload-hint">支援 PDF、Word、TXT 格式<br>檔案將用於 AI 分析，不會儲存</div>
+          <div id="fileNameBadge" style="display:none" class="file-badge">
+            <span>📎</span><span id="fileName"></span>
+          </div>
+          <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.txt">
+        </div>
+      </div>
+
+      <div class="or-sep">或直接貼上文字</div>
+
+      <!-- Text input -->
+      <div class="text-area-wrap">
+        <div class="section-label">履歷文字內容</div>
+        <textarea id="resumeText" placeholder="將您的履歷內容貼在此處⋯⋯&#10;&#10;例如：工作經歷、技能、成就、學歷等。AI 將分析您的人才溫度，給出對應的刻度分類與鼓勵話語。"></textarea>
+      </div>
+
+      <!-- Error -->
+      <div class="error-msg" id="errorMsg"></div>
+
+      <!-- Analyze button -->
+      <button class="analyze-btn" id="analyzeBtn" onclick="analyze()">
+        <span class="btn-inner">
+          <span id="btnText">🌡️ 測量我的履歷溫度</span>
+          <span class="loading-dots" id="loadingDots">
+            <span></span><span></span><span></span>
+          </span>
+        </span>
+      </button>
+
+      <!-- Results -->
+      <div class="result-panel" id="resultPanel">
+        <div class="result-header">
+          <div>
+            <div class="result-badge" id="resultBadge">Level 1</div>
+          </div>
+          <div>
+            <div class="result-level-name" id="resultLevelName">冰點刻度</div>
+          </div>
+        </div>
+        <div class="result-body">
+          <div class="quadrant-box">
+            <div class="quadrant-title">象限分析</div>
+            <div class="quadrant-content" id="quadrantContent">—</div>
+          </div>
+          <div class="encouragement-box" id="encouragementContent">—</div>
+        </div>
+      </div>
+
+      <!-- Scale reference -->
+      <hr class="divider">
+      <div class="scales-title">五大刻度參考</div>
+      <div class="scale-cards">
+        <div class="scale-card" id="card-5">
+          <div class="scale-dot" style="background:#c084fc;box-shadow:0 0 8px #c084fc"></div>
+          <div>
+            <div class="scale-card-name" style="color:#c084fc">等離子體刻度 · Visionary Ecosystem Builder</div>
+            <div class="scale-card-desc">個人 IP 與願景體現，跨界整合，創造賽道，超越職位限制</div>
+          </div>
+        </div>
+        <div class="scale-card" id="card-4">
+          <div class="scale-dot" style="background:#ff6b35;box-shadow:0 0 8px #ff6b35"></div>
+          <div>
+            <div class="scale-card-name" style="color:#ff6b35">沸點刻度 · Transformational Leader</div>
+            <div class="scale-card-desc">顛覆與帶領，策略轉型，AI 賦能，指數型成長的變革力</div>
+          </div>
+        </div>
+        <div class="scale-card" id="card-3">
+          <div class="scale-dot" style="background:#f0c060;box-shadow:0 0 8px #f0c060"></div>
+          <div>
+            <div class="scale-card-name" style="color:#f0c060">微溫刻度 · Value Creator</div>
+            <div class="scale-card-desc">解決複雜問題，跨部門整合，主動彌補系統漏洞</div>
+          </div>
+        </div>
+        <div class="scale-card" id="card-2">
+          <div class="scale-dot" style="background:#a8e6a3;box-shadow:0 0 8px #a8e6a3"></div>
+          <div>
+            <div class="scale-card-name" style="color:#a8e6a3">室溫刻度 · Competent Professional</div>
+            <div class="scale-card-desc">量化成果，KPI 達成，穩定交付，從執行者到達成者</div>
+          </div>
+        </div>
+        <div class="scale-card" id="card-1">
+          <div class="scale-dot" style="background:#7ec8e3;box-shadow:0 0 8px #7ec8e3"></div>
+          <div>
+            <div class="scale-card-name" style="color:#7ec8e3">冰點刻度 · Survival Mode</div>
+            <div class="scale-card-desc">流水帳職責條列，缺乏數據，證明基礎執行能力</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  // File upload handling
+  const uploadZone = document.getElementById('uploadZone');
+  const fileInput = document.getElementById('fileInput');
+  const fileNameBadge = document.getElementById('fileNameBadge');
+  const fileNameEl = document.getElementById('fileName');
+
+  let uploadedFileContent = null;
+
+  uploadZone.addEventListener('click', () => fileInput.click());
+
+  uploadZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    uploadZone.classList.add('drag-over');
+  });
+  uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+  uploadZone.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  });
+
+  fileInput.addEventListener('change', e => {
+    if (e.target.files[0]) handleFile(e.target.files[0]);
+  });
+
+  function handleFile(file) {
+    fileNameEl.textContent = file.name;
+    fileNameBadge.style.display = 'inline-flex';
+
+    const reader = new FileReader();
+    if (file.type === 'application/pdf') {
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        uploadedFileContent = { type: 'pdf', data: reader.result.split(',')[1] };
+      };
+    } else {
+      reader.readAsText(file);
+      reader.onload = () => {
+        uploadedFileContent = { type: 'text', data: reader.result };
+        document.getElementById('resumeText').value = reader.result;
+      };
+    }
+  }
+
+  // Thermometer animation
+  const levelConfig = {
+    1: { fill: 280, color: '#7ec8e3', glow: 'rgba(126,200,227,0.6)', label: '冰點刻度', badge: 'Level 1 · Survival Mode', badgeBg: 'rgba(126,200,227,0.15)', badgeColor: '#7ec8e3', temp: '0°' },
+    2: { fill: 210, color: '#a8e6a3', glow: 'rgba(168,230,163,0.6)', label: '室溫刻度', badge: 'Level 2 · Competent', badgeBg: 'rgba(168,230,163,0.15)', badgeColor: '#a8e6a3', temp: '25°' },
+    3: { fill: 140, color: '#f0c060', glow: 'rgba(240,192,96,0.6)', label: '微溫刻度', badge: 'Level 3 · Value Creator', badgeBg: 'rgba(240,192,96,0.15)', badgeColor: '#f0c060', temp: '60°' },
+    4: { fill: 70, color: '#ff6b35', glow: 'rgba(255,107,53,0.6)', label: '沸點刻度', badge: 'Level 4 · Transformational', badgeBg: 'rgba(255,107,53,0.15)', badgeColor: '#ff6b35', temp: '100°' },
+    5: { fill: 0, color: '#c084fc', glow: 'rgba(192,132,252,0.7)', label: '等離子體刻度', badge: 'Level 5 · Visionary', badgeBg: 'rgba(192,132,252,0.15)', badgeColor: '#c084fc', temp: '∞°' },
+  };
+
+  function setThermometer(level) {
+    const cfg = levelConfig[level];
+    const fill = document.getElementById('thermoFill');
+    const bulb = document.getElementById('thermoBulb');
+    const tempVal = document.getElementById('tempValue');
+
+    const fillHeight = 340 - cfg.fill;
+    fill.style.height = fillHeight + 'px';
+    fill.style.y = (30 + cfg.fill) + '';
+    fill.setAttribute('y', 30 + cfg.fill);
+    fill.setAttribute('height', fillHeight);
+
+    bulb.style.fill = cfg.color;
+    bulb.style.filter = `drop-shadow(0 0 8px ${cfg.glow})`;
+    tempVal.textContent = cfg.temp;
+    tempVal.style.color = cfg.color;
+
+    // Labels
+    document.querySelectorAll('.thermo-label').forEach(el => {
+      el.classList.toggle('active', parseInt(el.dataset.level) === level);
+      el.style.color = parseInt(el.dataset.level) === level ? cfg.color : '';
+    });
+
+    // Cards
+    document.querySelectorAll('.scale-card').forEach(el => {
+      const cardLevel = parseInt(el.id.split('-')[1]);
+      el.classList.toggle('highlight', cardLevel === level);
+      if (cardLevel === level) {
+        el.style.borderColor = `${cfg.color}66`;
+        el.style.background = `${cfg.color}0d`;
+      } else {
+        el.style.borderColor = '';
+        el.style.background = '';
+      }
+    });
+  }
+
+  async function analyze() {
+    const text = document.getElementById('resumeText').value.trim();
+    const btn = document.getElementById('analyzeBtn');
+    const btnText = document.getElementById('btnText');
+    const loadingDots = document.getElementById('loadingDots');
+    const errorMsg = document.getElementById('errorMsg');
+    const resultPanel = document.getElementById('resultPanel');
+
+    if (!text && !uploadedFileContent) {
+      showError('請先上傳履歷或貼上履歷文字內容。');
+      return;
+    }
+
+    // Loading state
+    btn.disabled = true;
+    btnText.style.display = 'none';
+    loadingDots.style.display = 'flex';
+    errorMsg.style.display = 'none';
+    resultPanel.style.display = 'none';
+
+    try {
+      // Build messages
+      let messages;
+      const prompt = `你是一位資深職涯顧問，專精於分析履歷的「人才溫度」。請根據以下五個刻度評估這份履歷：
+
+1. 冰點刻度（Survival Mode）：流水帳職責，無數據，基礎執行
+2. 室溫刻度（Competent Professional）：有量化成果，KPI，穩定交付
+3. 微溫刻度（Value Creator）：解決複雜問題，跨部門合作，流程優化
+4. 沸點刻度（Transformational Leader）：領導變革，策略轉型，指數型成長
+5. 等離子體刻度（Visionary Ecosystem Builder）：個人 IP，創造賽道，跨界整合
+
+請分析這份履歷並以 JSON 格式回應（只回 JSON，不要任何其他文字）：
+{
+  "level": <1-5的整數>,
+  "quadrant_analysis": "<80-120字的象限分析，說明此履歷屬於哪個象限，以及其核心特徵與位置>",
+  "encouragement": "<100-150字的鼓勵話語，溫暖而有力，幫助求職者重建信心，看見自己的潛力與價值，用第二人稱「您」>",
+  "level_name": "<刻度名稱，如：冰點刻度・生存型人力>"
+}
+
+以下是履歷內容：
+${text}`;
+
+      if (uploadedFileContent && uploadedFileContent.type === 'pdf') {
+        messages = [{
+          role: 'user',
+          content: [
+            { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: uploadedFileContent.data } },
+            { type: 'text', text: prompt.replace(`\n\n以下是履歷內容：\n${text}`, '\n\n請分析以上 PDF 履歷。') }
+          ]
+        }];
+      } else {
+        messages = [{ role: 'user', content: prompt }];
+      }
+
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          messages
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.error) throw new Error(data.error.message);
+
+      const rawText = data.content.map(i => i.text || '').join('');
+      const clean = rawText.replace(/```json|```/g, '').trim();
+      const result = JSON.parse(clean);
+
+      const level = Math.min(5, Math.max(1, parseInt(result.level)));
+      const cfg = levelConfig[level];
+
+      // Animate thermometer
+      setThermometer(level);
+
+      // Show results
+      document.getElementById('resultBadge').textContent = cfg.badge;
+      document.getElementById('resultBadge').style.background = cfg.badgeBg;
+      document.getElementById('resultBadge').style.color = cfg.badgeColor;
+      document.getElementById('resultBadge').style.border = `1px solid ${cfg.badgeColor}44`;
+
+      document.getElementById('resultLevelName').textContent = result.level_name || cfg.label;
+      document.getElementById('resultLevelName').style.color = cfg.color;
+
+      document.getElementById('quadrantContent').textContent = result.quadrant_analysis;
+      document.getElementById('encouragementContent').textContent = result.encouragement;
+      document.querySelector('.quadrant-box').style.borderLeftColor = cfg.color;
+
+      resultPanel.style.display = 'block';
+
+    } catch (err) {
+      console.error(err);
+      showError('分析時發生錯誤：' + err.message + '。請確認已正確設置 API Key 或稍後再試。');
+    } finally {
+      btn.disabled = false;
+      btnText.style.display = 'inline';
+      loadingDots.style.display = 'none';
+    }
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('errorMsg');
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+</script>
+</body>
+</html>
 
